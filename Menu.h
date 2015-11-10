@@ -7,48 +7,31 @@
 
 using namespace std;
 
-#define RIGHT_ARROW 77
-#define LEFT_ARROW 75
-#define UP_ARROW 72
-#define DOWN_ARROW 80
-#define SPACE_KEY 32
-#define ENTER_KEY 13
-
-char* FixString(char *oldString)
-{
-	int length = strlen(oldString) + 1;
-	char *newString = new char[length];
-	strcpy_s(newString, length, oldString);
-
-	return newString;
-}
-
-void SetCursorPosition(short xPos, short yPos)
-{
-	COORD position = { xPos, yPos };
-	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), position);
-}
+typedef void(*Function)();
 
 class MenuItem
 {
 	char *title;
-	void(*method)();
+	Function function;
+
 public:
-	MenuItem(char *_title, void(*_method)())
+	MenuItem(char *_title, Function _function)
 	{
 		SetTitle(_title);
-		SetMethod(_method);
+		SetFunction(_function);
 	}
 
 	MenuItem(MenuItem *menuItem)
 	{
 		SetTitle(menuItem->GetTitle());
-		SetMethod(menuItem->GetMethod());
+		SetFunction(menuItem->GetFunction());
 	}
 
 	void SetTitle(char *_title)
 	{
-		title = FixString(_title);
+		int length = strlen(_title) + 1;
+		title = new char[length];
+		strcpy_s(title, length, _title);
 	}
 
 	char* GetTitle()
@@ -56,15 +39,14 @@ public:
 		return title;
 	}
 
-	void SetMethod(void(*_method)())
+	void SetFunction(Function _function)
 	{
-		method = _method;
+		function = _function;
 	}
 
-	typedef void(*ptr)();
-	ptr GetMethod()
+	Function GetFunction()
 	{
-		return method;
+		return function;
 	}
 
 	void Print()
@@ -74,7 +56,7 @@ public:
 
 	void Run()
 	{
-		method();
+		function();
 	}
 
 	~MenuItem()
@@ -86,30 +68,31 @@ public:
 class Menu
 {
 	HANDLE hConsole;
-
 	COORD menuPosition;
-	char *menuTitle;
+	char *title;
 	int menuItemsCount;
 	MenuItem **menuItems;
-	
 	int activeMenuItem;
+
 public:
-	Menu(char *_menuTitle)
+	Menu(char *_title)
 	{
 		hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-
-		menuPosition = {0,0};
-
-		menuTitle = FixString(_menuTitle);
-
+		menuPosition = { 0,0 };
+		SetTitle(_title);
 		menuItemsCount = 0;
-
 		menuItems = new MenuItem*[menuItemsCount];
-
 		activeMenuItem = 0;
 	}
 
-	void AddMenuItem(char *_menuItemTitle, void(*_method)())
+	void SetTitle(char *_title)
+	{
+		int length = strlen(_title) + 1;
+		title = new char[length];
+		strcpy_s(title, length, _title);
+	}
+
+	void AddMenuItem(char *_menuItemTitle, Function _function)
 	{
 		MenuItem **newMenuItems = new MenuItem*[menuItemsCount + 1];
 
@@ -123,18 +106,18 @@ public:
 			delete menuItems[i];
 		}
 
-		newMenuItems[menuItemsCount] = new MenuItem(_menuItemTitle, _method);
+		newMenuItems[menuItemsCount] = new MenuItem(_menuItemTitle, _function);
 
 		++menuItemsCount;
 
 		menuItems = newMenuItems;
 	}
 
-	void SetPosition(int _x, int _y)
+	void SetPosition(short _x, short _y)
 	{
-		menuPosition.X = _x;
-		menuPosition.Y = _y;
+		menuPosition = { _x , _y };
 	}
+
 private:
 	void Print()
 	{
@@ -146,11 +129,11 @@ private:
 
 		system("cls");
 		SetCursorPosition(x, y);
-		cout << menuTitle << endl;
+		cout << title << endl;
 		for (int i = 0; i < menuItemsCount; i++)
 		{
 			SetCursorPosition(x, ++y);
-			if(i == activeMenuItem)
+			if (i == activeMenuItem)
 			{
 				SetConsoleTextAttribute(hConsole, FOREGROUND_GREEN | FOREGROUND_INTENSITY);
 
@@ -164,20 +147,29 @@ private:
 			}
 		}
 	}
+
 public:
 	void Show()
 	{
-		int key;
+		enum
+		{
+			UP_ARROW_KEY = 72,
+			DOWN_ARROW_KEY = 80,
+			SPACE_KEY = 32,
+			ENTER_KEY = 13,
+			ESCAPE_KEY = 27
+		};
+
+		bool menu = true;
 		int lastMenuItem = menuItemsCount - 1;
 
-		Print();
-		while (true)
+		while (menu)
 		{
-			key = _getch();
-
+			Print();
+			int key = _getch();
 			switch (key)
 			{
-			case UP_ARROW:
+			case UP_ARROW_KEY:
 				if (0 < activeMenuItem)
 				{
 					activeMenuItem -= 1;
@@ -186,10 +178,9 @@ public:
 				{
 					activeMenuItem = lastMenuItem;
 				}
-				Print();
 				break;
 
-			case DOWN_ARROW:
+			case DOWN_ARROW_KEY:
 				if (activeMenuItem < lastMenuItem)
 				{
 					activeMenuItem += 1;
@@ -198,28 +189,33 @@ public:
 				{
 					activeMenuItem = 0;
 				}
-				Print();
 				break;
 
 			case ENTER_KEY:
 				menuItems[activeMenuItem]->Run();
 				break;
 
-				default:
-					Print();
-					break;
+			case ESCAPE_KEY:
+				menu = false;
+				system("cls");
+				break;
 			}
 		}
-
 	}
 
 	~Menu()
 	{
-		delete[] menuTitle;
+		delete[] title;
 
 		for (int i = 0; i < menuItemsCount; i++)
 		{
 			delete menuItems[i];
 		}
+	}
+
+private:
+	void SetCursorPosition(short x, short y)
+	{
+		SetConsoleCursorPosition(hConsole, COORD{ x , y });
 	}
 };
